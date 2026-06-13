@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run full test suite
+        env:
+          APP_ENV: development
+          API_KEYS: sk-test-ci-key
+          DATABASE_URL: sqlite:///./test_ci.db
+          RATE_LIMIT_REQUESTS: "200"
+          RATE_LIMIT_WINDOW_SECONDS: "60"
+        run: python -m pytest tests/ -v --tb=short
+
+      - name: Verify all Python files compile
+        run: |
+          find . -name "*.py" -not -path "*/__pycache__/*" \
+            -not -path "./.venv/*" \
+            | xargs python -m py_compile && echo "All files OK"
+
+      - name: Smoke test - app starts
+        env:
+          APP_ENV: development
+          API_KEYS: sk-smoke-test
+          DATABASE_URL: sqlite:///./test_smoke.db
+        run: |
+          python -c "
+          import os, sys
+          sys.path.insert(0, '.')
+          from main import create_app
+          app = create_app()
+          print('App created OK, routes:', len(app.routes))
+          "
